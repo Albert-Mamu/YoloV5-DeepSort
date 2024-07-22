@@ -254,7 +254,7 @@ python3  track.py  --source  ...  --save-txt
 
 **Face Detection Result**
 
-All detected face is saved to `inference/output` with filename format : `xxxx_[face_number]_[gender].jpg`
+All detected face is saved to `inference/output` with filename format : `xxxx_[face_number]_[gender]_[age].jpg`
   
 
 # Train YOLO weights with your datasets
