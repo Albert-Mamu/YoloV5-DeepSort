@@ -18,7 +18,24 @@ import torch
 import torch.backends.cudnn as cudnn
 
 palette = (2 ** 11 - 1, 2 ** 15 - 1, 2 ** 20 - 1)
-countFace = 0
+countFaces = 0
+
+# Load Face
+faceProto="opencv_face_detector.pbtxt"
+faceModel="opencv_face_detector_uint8.pb"
+ageProto="age_deploy.prototxt"
+ageModel="age_net.caffemodel"
+genderProto="gender_deploy.prototxt"
+genderModel="gender_net.caffemodel"
+
+MODEL_MEAN_VALUES=(78.4263377603, 87.7689143744, 114.895847746)
+ageList=['(0-2)', '(4-6)', '(8-12)', '(15-20)', '(25-32)', '(38-43)', '(48-53)', '(60-100)']
+genderList=['Male','Female']
+
+faceNet=cv2.dnn.readNet(faceModel,faceProto)
+ageNet=cv2.dnn.readNet(ageModel,ageProto)
+genderNet=cv2.dnn.readNet(genderModel,genderProto)
+
 
 def bbox_rel(*xyxy):
     """" Calculate boundary values """
@@ -64,26 +81,65 @@ def draw_boxes(img, bbox, identities=None, offset=(0, 0)):
 
     return img
 
-def detect_faces(face_cascade, img, x0, y0, w0, h0, save_path):
+
+def highlightFace(net, frame, conf_threshold=0.7):
+    """
+    Highlight Face face on person
+    """    
+    frameOpencvDnn=frame.copy()
+    frameHeight=frameOpencvDnn.shape[0]
+    frameWidth=frameOpencvDnn.shape[1]
+    blob=cv2.dnn.blobFromImage(frameOpencvDnn, 1.0, (300, 300), [104, 117, 123], True, False)
+
+    net.setInput(blob)
+    detections=net.forward()
+    
+    faceBoxes=[]
+    for i in range(detections.shape[2]):
+        confidence=detections[0,0,i,2]
+        if confidence>conf_threshold:
+            x1=int(detections[0,0,i,3]*frameWidth)
+            y1=int(detections[0,0,i,4]*frameHeight)
+            x2=int(detections[0,0,i,5]*frameWidth)
+            y2=int(detections[0,0,i,6]*frameHeight)
+            faceBoxes.append([x1,y1,x2,y2])
+            cv2.rectangle(frameOpencvDnn, (x1,y1), (x2,y2), (0,255,0), int(round(frameHeight/150)), 8)
+    return frameOpencvDnn,faceBoxes
+
+
+def detect_faces(img, x0, y0, w0, h0, save_path):
     """
     Detect face on person
     """    
-    global countFace
+    global countFaces
 
     imgCrop = None
     imgCrop = img[y0:y0+h0, x0:x0+w0]
+    padding=20
 
-    gray = cv2.cvtColor(imgCrop, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5) 
+    resultImg,faceBoxes = highlightFace(faceNet, imgCrop)
+    savefile = save_path[:-4]
+    
+    for faceBox in faceBoxes:
+        countFaces += 1
+        face=imgCrop[max(0,faceBox[1]-padding):
+                   min(faceBox[3]+padding,imgCrop.shape[0]-1),max(0,faceBox[0]-padding)
+                   :min(faceBox[2]+padding, imgCrop.shape[1]-1)]
 
-    if len(faces) >= 1:
-        for (x,y,w,h) in faces: 
-            countFace=countFace+1
-            # save faces
-            imgSave = imgCrop[y:y+h, x:x+w]
-            save_img = save_path[:-3]
-            save_img += str(countFace) + ".jpg"
-            cv2.imwrite(save_img, imgSave)
+        blob=cv2.dnn.blobFromImage(face, 1.0, (227,227), MODEL_MEAN_VALUES, swapRB=False)
+        genderNet.setInput(blob)
+        genderPreds=genderNet.forward()
+        gender=genderList[genderPreds[0].argmax()]
+        #print(f'Gender: {gender}')
+
+        ageNet.setInput(blob)
+        agePreds=ageNet.forward()
+        age=ageList[agePreds[0].argmax()]
+        ageinyears = age[1:-1]
+        #print(f'Age: {age[1:-1]} years')
+        savefile += "_" + str(countFaces) + "_" + str(gender) + "_" + str(age[1:-1])
+        savefile += ".jpg"
+        cv2.imwrite(savefile, imgCrop)
 
     return img
 
@@ -92,9 +148,6 @@ def detect(opt, save_img=False):
         opt.output, opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size
     webcam = source == '0' or source.startswith(
         'rtsp') or source.startswith('http') or source.endswith('.txt')
-
-    # Load Face
-    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
 
     # initialization deepsort
     cfg = get_config()
@@ -189,7 +242,6 @@ def detect(opt, save_img=False):
                     if names[int(c)] == 'person':   # Person detection
                         startFace = True;
                         facesArray[int(c)]=1
-                        print("Detecting faces!")
 
                     s += '%g %ss, ' % (n, names[int(c)])  # Add Tags
 
@@ -213,13 +265,12 @@ def detect(opt, save_img=False):
                 if startFace == True:
                     if len(outputs) != 0:
                         for j, output in enumerate(outputs):
-                            if ( facesArray[j] == 1 ):
-                                bbox_left = output[0]
-                                bbox_top = output[1]
-                                bbox_w = output[2]
-                                bbox_h = output[3]
-                                identity = output[-1]
-                                detect_faces( face_cascade, im0, bbox_left, bbox_top, bbox_w, bbox_h, save_path)
+                            bbox_left = output[0]
+                            bbox_top = output[1]
+                            bbox_w = output[2]
+                            bbox_h = output[3]
+                            identity = output[-1]
+                            detect_faces(im0, bbox_left, bbox_top, bbox_w, bbox_h, save_path)
 
                 # Logo border
                 if len(outputs) > 0:
