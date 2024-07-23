@@ -1,4 +1,5 @@
 
+
 # YoloV5-DeepSort
 
 Fast object tracking with yolov5-deepsort is also equipped with a face detection feature (Gender and Age).
@@ -219,7 +220,7 @@ You can download the weight trained by me. Using email at: albertflicky@gmail.co
 
 - 95: helmet
 
-  
+  ![enter image description here](https://ingeninnovationtech.co.id/wp-content/uploads/2024/07/results.png)
 
 or choose to download the pretrained weight of the YOLO V5 model with using the `./yolov5/weights/downloadweight.sh`.
 
@@ -254,7 +255,7 @@ python3  track.py  --source  ...  --save-txt
 
 **Face Detection Result**
 
-All detected face is saved to `inference/output` with filename format : `xxxx_[face_number]_[gender]_[age].jpg`
+All detected face is saved to `inference/output` with filename format : `xxxx_[face_number]_[gender].jpg`
   
 
 # Train YOLO weights with your datasets
